@@ -1,0 +1,9 @@
+[package]
+name = "rustApplication"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+eframe = "0.31.0"
+rdev = "0.5.3"
+tray-icon = "0.20.0"
