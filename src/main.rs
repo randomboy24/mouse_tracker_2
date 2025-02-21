@@ -52,7 +52,7 @@ impl eframe::App for App {
 impl App {
     fn start_tracking(&mut self) {
         if self.tracking {
-            return; // Prevent multiple tracking sessions
+            return; 
         }
         
         self.tracking = true;
@@ -70,7 +70,7 @@ impl App {
         let tracking_flag = Arc::clone(&self.tracking_flag);
         let task_name = self.input_text.clone();
 
-        // Mouse event listener
+       
         let tracking_flag_listener = Arc::clone(&tracking_flag);
         thread::spawn(move || {
             listen(move |event: Event| {
@@ -102,7 +102,7 @@ impl App {
             .unwrap();
         });
 
-        // Timer thread to stop tracking after 10 seconds
+       
         let tracking_flag_timer = Arc::clone(&tracking_flag);
         let events = Arc::clone(&self.events);
         thread::spawn(move || {
@@ -111,7 +111,7 @@ impl App {
             
             let data = {
                 let data = events.lock().unwrap();
-                data.clone() // Clone once to minimize lock duration
+                data.clone() 
             };
 
             let mut file = OpenOptions::new()
