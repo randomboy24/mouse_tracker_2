@@ -52,28 +52,20 @@ impl eframe::App for App {
 impl App {
     fn start_tracking(&mut self) {
         if self.tracking {
-            return; 
+            return;
         }
         
         self.tracking = true;
-        {
-            let mut tracking_flag = self.tracking_flag.lock().unwrap();
-            *tracking_flag = true;
-        }
-        
-        {
-            let mut events = self.events.lock().unwrap();
-            events.clear();
-        }
+        *self.tracking_flag.lock().unwrap() = true;
+        self.events.lock().unwrap().clear();
 
         let events = Arc::clone(&self.events);
         let tracking_flag = Arc::clone(&self.tracking_flag);
         let task_name = self.input_text.clone();
 
-       
         let tracking_flag_listener = Arc::clone(&tracking_flag);
         thread::spawn(move || {
-            listen(move |event: Event| {
+            if let Err(e) = listen(move |event: Event| {
                 if !*tracking_flag_listener.lock().unwrap() {
                     return;
                 }
@@ -88,68 +80,73 @@ impl App {
                         format!("{},{},MouseMove,{:.3},{:.3}", task_name, timestamp, x, y)
                     }
                     EventType::ButtonPress(button) => {
-                        format!("{},{},ButtonPress,{:?}", task_name, timestamp, button)
+                        format!("{},{},ButtonPress,{:?},", task_name, timestamp, button)
                     }
                     EventType::ButtonRelease(button) => {
-                        format!("{},{},ButtonRelease,{:?}", task_name, timestamp, button)
+                        format!("{},{},ButtonRelease,{:?},", task_name, timestamp, button)
+                    }
+                    EventType::KeyPress(key) => {
+                        format!("{},{},KeyPress,{:?},", task_name, timestamp, key)
+                    }
+                    EventType::KeyRelease(key) => {
+                        format!("{},{},KeyRelease,{:?},", task_name, timestamp, key)
                     }
                     _ => return,
                 };
 
                 let mut data = events.lock().unwrap();
                 data.push(event_string);
-            })
-            .unwrap();
+            }) {
+                eprintln!("Error starting event listener: {:?}", e);
+            }
         });
 
-       
         let tracking_flag_timer = Arc::clone(&tracking_flag);
         let events = Arc::clone(&self.events);
         thread::spawn(move || {
             thread::sleep(Duration::from_secs(10));
             *tracking_flag_timer.lock().unwrap() = false;
-            
-            let data = {
-                let data = events.lock().unwrap();
-                data.clone() 
-            };
-
-            let mut file = OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open("mouse_tracking_data.csv")
-                .unwrap();
-
-            for line in data.iter() {
-                writeln!(file, "{}", line).unwrap();
-            }
+            Self::save_events_static(&events).unwrap_or_else(|e| eprintln!("Error saving events: {}", e));
         });
     }
 
     fn save_events(&self) {
-        let data = {
-            let data = self.events.lock().unwrap();
-            data.clone()
-        };
+        if let Err(e) = Self::save_events_static(&self.events) {
+            eprintln!("Error saving events: {}", e);
+        }
+    }
 
+    fn save_events_static(events: &Arc<Mutex<Vec<String>>>) -> std::io::Result<()> {
         let mut file = OpenOptions::new()
             .create(true)
             .append(true)
-            .open("mouse_tracking_data.csv")
-            .unwrap();
+            .open("mouse_tracking_data.csv")?;
+
+        let metadata = file.metadata()?;
+        if metadata.len() == 0 {
+            writeln!(file, "Task,Timestamp,EventType,Details1,Details2")?;
+        }
+
+        let data = {
+            let data = events.lock().unwrap();
+            data.clone()
+        };
 
         for line in data.iter() {
-            writeln!(file, "{}", line).unwrap();
+            writeln!(file, "{}", line)?;
         }
+
+        Ok(())
     }
 }
 
 fn main() {
     let options = eframe::NativeOptions::default();
-    eframe::run_native(
+    if let Err(e) = eframe::run_native(
         "Mouse Tracker",
         options,
         Box::new(|_| Ok(Box::new(App::default()))),
-    )
-    .unwrap();
+    ) {
+        eprintln!("Application error: {}", e);
+    }
 }
